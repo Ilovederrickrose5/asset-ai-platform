@@ -151,15 +151,16 @@ public class KnowledgeBaseService {
         List<String> previousDocIds = getProcessedDocIds(fileKey);
         List<Document> documents = processFile(resource, fileKey);
 
-        if (!documents.isEmpty()) {
-            vectorStore.add(documents);
-            logger.info("Added {} document chunks to vector store for {}", documents.size(), fileKey);
-        }
-
+        // 先删除旧分块再写入新分块：未变动分块的 ID 是内容哈希，先写后删会把新写入的同一 ID 一起删掉
         boolean deleted = deleteDocuments(previousDocIds, fileKey);
         if (previousDocIds.isEmpty() && previousHash != null) {
             logger.warn("No document id record found for updated file {}, old chunks may remain. "
                     + "Recreate the Redis index if duplicates appear.", fileKey);
+        }
+
+        if (!documents.isEmpty()) {
+            vectorStore.add(documents);
+            logger.info("Added {} document chunks to vector store for {}", documents.size(), fileKey);
         }
 
         if (deleted) {

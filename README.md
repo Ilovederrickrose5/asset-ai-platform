@@ -569,7 +569,7 @@ proxy: {
 
 - JDK 17+
 - Maven 3.9+
-- Node.js 18+
+- Node.js 20.19+ 或 22.12+（Vite 7 与 marked 18 的最低要求）
 - MySQL 8.0+（本机安装即可）
 - Docker Desktop（可选，用于一键启动 Redis 与 Nacos）
 - Redis Stack 7.4+（AI 向量检索依赖 RediSearch，普通 Redis 镜像不支持）

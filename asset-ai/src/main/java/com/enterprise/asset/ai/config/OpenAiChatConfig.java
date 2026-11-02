@@ -15,6 +15,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 
 import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
 
 @Configuration
 public class OpenAiChatConfig {
@@ -73,22 +74,30 @@ public class OpenAiChatConfig {
     @Bean
     public ApplicationRunner aiConnectionWarmup(ChatClient.Builder chatClientBuilder) {
         return args -> {
-            logger.info("Starting AI connection warmup...");
-            long startTime = System.currentTimeMillis();
-
-            try {
-                ChatClient chatClient = chatClientBuilder.build();
-                chatClient.prompt()
-                        .messages(new UserMessage("ping"))
-                        .stream()
-                        .content()
-                        .collectList()
-                        .block(Duration.ofSeconds(15));
-
-                logger.info("AI connection warmup completed in {}ms", System.currentTimeMillis() - startTime);
-            } catch (Exception e) {
-                logger.warn("AI connection warmup failed (will retry on first request): {}", e.getMessage());
+            if (apiKey == null || apiKey.isBlank()) {
+                logger.info("Skip AI connection warmup: api key not configured");
+                return;
             }
+
+            // 预热不是启动依赖：异步执行，避免上游不可用时拖慢启动与 Nacos 注册
+            CompletableFuture.runAsync(() -> {
+                logger.info("Starting AI connection warmup...");
+                long startTime = System.currentTimeMillis();
+
+                try {
+                    ChatClient chatClient = chatClientBuilder.build();
+                    chatClient.prompt()
+                            .messages(new UserMessage("ping"))
+                            .stream()
+                            .content()
+                            .collectList()
+                            .block(Duration.ofSeconds(15));
+
+                    logger.info("AI connection warmup completed in {}ms", System.currentTimeMillis() - startTime);
+                } catch (Exception e) {
+                    logger.warn("AI connection warmup failed (will retry on first request): {}", e.getMessage());
+                }
+            });
         };
     }
 

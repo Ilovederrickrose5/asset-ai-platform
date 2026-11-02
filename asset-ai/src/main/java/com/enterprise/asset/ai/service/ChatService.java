@@ -124,8 +124,19 @@ public class ChatService {
     public AiConversation createConversation(Long userId, String title) {
         AiConversation conversation = new AiConversation();
         conversation.setUserId(userId);
-        conversation.setTitle(title != null && !title.isEmpty() ? title : "新对话");
+        conversation.setTitle(normalizeTitle(title));
         return conversationRepository.save(conversation);
+    }
+
+    private String normalizeTitle(String title) {
+        if (title == null) {
+            return "新对话";
+        }
+        String cleaned = title.replaceAll("\\p{Cntrl}", " ").trim();
+        if (cleaned.isEmpty()) {
+            return "新对话";
+        }
+        return cleaned.length() > 200 ? cleaned.substring(0, 200) : cleaned;
     }
 
     public List<AiConversation> getConversations(Long userId) {
@@ -337,29 +348,12 @@ public class ChatService {
 
     private void deleteChatHistory(Long conversationId) {
         String cacheKey = CHAT_HISTORY_KEY_PREFIX + conversationId;
-        int maxRetries = 2;
-        int retryDelayMs = 100;
 
-        for (int i = 0; i <= maxRetries; i++) {
-            try {
-                redisTemplate.delete(cacheKey);
-                if (i > 0) {
-                    logger.info("Redis cache delete succeeded after {} retries, key={}", i, cacheKey);
-                }
-                return;
-            } catch (Exception e) {
-                if (i < maxRetries) {
-                    logger.warn("Redis cache delete attempt {} failed, key={}, retrying...", i + 1, cacheKey);
-                    try {
-                        Thread.sleep(retryDelayMs * (i + 1));
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        break;
-                    }
-                } else {
-                    logger.error("Redis cache delete failed after {} attempts, key={}", maxRetries + 1, cacheKey, e);
-                }
-            }
+        // 单次尝试即可：重试只会让请求线程在 Redis 故障时长时间阻塞，缓存最终由 TTL 兜底
+        try {
+            redisTemplate.delete(cacheKey);
+        } catch (Exception e) {
+            logger.warn("Redis cache delete failed, key={}, cause={}", cacheKey, e.toString());
         }
     }
 
@@ -566,14 +560,29 @@ public class ChatService {
 
     private void persistResponseOnce(AtomicBoolean persisted, Long conversationId, StringBuilder fullResponse,
             List<Message> chatHistory, String userContent) {
-        if (fullResponse.length() == 0 || !persisted.compareAndSet(false, true)) {
+        if (!persisted.compareAndSet(false, true)) {
             return;
         }
         try {
-            saveAiResponse(conversationId, fullResponse.toString(), chatHistory, userContent);
+            if (fullResponse.length() == 0) {
+                // 未产生任何内容也要刷新缓存，否则已落库的用户消息在下一轮上下文里会缺失
+                refreshHistoryCache(conversationId, chatHistory, userContent);
+            } else {
+                saveAiResponse(conversationId, fullResponse.toString(), chatHistory, userContent);
+            }
         } catch (Exception e) {
             logger.error("Failed to save AI response, conversationId={}", conversationId, e);
         }
+    }
+
+    private void refreshHistoryCache(Long conversationId, List<Message> chatHistory, String userContent) {
+        if (!conversationRepository.existsById(conversationId)) {
+            return;
+        }
+        List<Message> updatedHistory = new ArrayList<>(chatHistory);
+        updatedHistory.add(new UserMessage(userContent));
+        trimChatHistory(updatedHistory);
+        saveChatHistory(conversationId, updatedHistory);
     }
 
     private boolean isRetryableError(Throwable error) {
@@ -597,6 +606,12 @@ public class ChatService {
 
     private void saveAiResponse(Long conversationId, String aiContent,
             List<Message> chatHistory, String userContent) {
+        // 流式响应期间会话可能已被删除，避免写入孤儿消息和重建缓存
+        if (!conversationRepository.existsById(conversationId)) {
+            logger.warn("Skip saving AI response, conversation already deleted, conversationId={}", conversationId);
+            return;
+        }
+
         List<Message> updatedHistory = new ArrayList<>(chatHistory);
         updatedHistory.add(new UserMessage(userContent));
         updatedHistory.add(new AssistantMessage(aiContent));
@@ -606,7 +621,13 @@ public class ChatService {
         aiMessage.setConversationId(conversationId);
         aiMessage.setRole("assistant");
         aiMessage.setContent(aiContent);
-        messageRepository.save(aiMessage);
+        AiMessage saved = messageRepository.save(aiMessage);
+
+        if (!conversationRepository.existsById(conversationId)) {
+            messageRepository.delete(saved);
+            logger.warn("Conversation deleted during stream, removed orphan message, conversationId={}", conversationId);
+            return;
+        }
 
         saveChatHistory(conversationId, updatedHistory);
     }

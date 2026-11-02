@@ -34,6 +34,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -280,6 +281,41 @@ class ChatServiceTest {
                 .anyMatch(m -> "assistant".equals(m.getRole()) && "回答".equals(m.getContent()));
     }
 
+    @Test
+    void streamMessage_emptyResponseRefreshesHistoryCache() {
+        stubConversation(5L, 1L);
+        when(messageRepository.findByConversationIdOrderByIdDesc(eq(5L), any())).thenReturn(List.of());
+        stubStreaming(Flux.empty());
+
+        @SuppressWarnings("unchecked")
+        ValueOperations<String, Object> valueOperations = mock(ValueOperations.class);
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+
+        chatService.streamMessage(1L, new MessageRequest(5L, "你好")).collectList().block();
+
+        ArgumentCaptor<Object> historyCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(valueOperations).set(eq("ai:chat:history:5"), historyCaptor.capture(), any(Duration.class));
+        assertThat(historyCaptor.getValue().toString()).contains("你好");
+
+        ArgumentCaptor<AiMessage> messageCaptor = ArgumentCaptor.forClass(AiMessage.class);
+        verify(messageRepository, atLeastOnce()).save(messageCaptor.capture());
+        assertThat(messageCaptor.getAllValues()).noneMatch(m -> "assistant".equals(m.getRole()));
+    }
+
+    @Test
+    void streamMessage_skipsPersistWhenConversationDeletedDuringStream() {
+        stubConversation(5L, 1L);
+        when(messageRepository.findByConversationIdOrderByIdDesc(eq(5L), any())).thenReturn(List.of());
+        stubStreaming(Flux.just("回答"));
+        when(conversationRepository.existsById(5L)).thenReturn(false);
+
+        chatService.streamMessage(1L, new MessageRequest(5L, "你好")).collectList().block();
+
+        ArgumentCaptor<AiMessage> messageCaptor = ArgumentCaptor.forClass(AiMessage.class);
+        verify(messageRepository, timeout(2000).atLeastOnce()).save(messageCaptor.capture());
+        assertThat(messageCaptor.getAllValues()).noneMatch(m -> "assistant".equals(m.getRole()));
+    }
+
     private void stubConversation(Long conversationId, Long ownerId) {
         AiConversation conversation = new AiConversation();
         conversation.setId(conversationId);
@@ -288,6 +324,7 @@ class ChatServiceTest {
         conversation.setCreateTime(LocalDateTime.now());
         conversation.setUpdateTime(LocalDateTime.now());
         lenient().when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        lenient().when(conversationRepository.existsById(conversationId)).thenReturn(true);
     }
 
     private void stubStreaming(Flux<String> flux) {

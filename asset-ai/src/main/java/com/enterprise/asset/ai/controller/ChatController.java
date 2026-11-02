@@ -6,6 +6,9 @@ import com.enterprise.asset.ai.dto.MessageRequest;
 import com.enterprise.asset.ai.dto.MessageResponse;
 import com.enterprise.asset.ai.entity.AiConversation;
 import com.enterprise.asset.ai.exception.BusinessException;
+import com.enterprise.asset.ai.exception.ForbiddenException;
+import com.enterprise.asset.ai.exception.NotFoundException;
+import com.enterprise.asset.ai.exception.UnauthorizedException;
 import com.enterprise.asset.ai.service.ChatService;
 import com.enterprise.asset.common.dto.UserDTO;
 import com.enterprise.asset.common.util.Result;
@@ -145,8 +148,15 @@ public class ChatController {
     }
 
     private String errorMessage(Throwable error) {
-        String message = error.getMessage();
-        return message == null || message.isBlank() ? "服务异常，请稍后重试" : message;
+        // 只透出业务异常的安全文案，上游/数据库异常的具体信息保留在服务端日志
+        if (error instanceof BusinessException || error instanceof NotFoundException
+                || error instanceof ForbiddenException || error instanceof UnauthorizedException) {
+            String message = error.getMessage();
+            if (message != null && !message.isBlank()) {
+                return message;
+            }
+        }
+        return "服务异常，请稍后重试";
     }
 
     private Long toMessageId(Object id) {
