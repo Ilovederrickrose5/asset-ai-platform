@@ -245,9 +245,9 @@ asset-ai-platform/
 | API路径 | HTTP方法 | 功能描述 |
 |---------|----------|----------|
 | `/api/auth/login` | POST | 用户登录 |
-| `/api/auth/register` | POST | 用户注册 |
 | `/api/auth/logout` | POST | 用户登出 |
-| `/api/auth/me` | GET | 获取当前用户信息 |
+| `/api/auth/users/current` | GET | 获取当前用户信息 |
+| `/api/auth/validate-token` | POST | 验证 Token 有效性 |
 
 ### 4.4 报表接口
 
@@ -398,6 +398,8 @@ public Page<Asset> getAssetsWithPagination(int page, int size, String status, St
 - 阿里云百炼 API Key（环境变量 `ALIYUN_API_KEY`）
 
 ### 7.2 启动方式
+
+> 首次运行需先创建 `asset-ai` 数据库并导入 `db/asset-ai-schema.sql`；三个服务的 `ddl-auto` 均为 `none`，JPA 不会自动建表。
 
 ```bash
 # 1. 启动基础设施（Redis Stack + Nacos）

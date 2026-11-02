@@ -230,12 +230,24 @@ frontend ──→ asset-gateway (9000) ──→ asset-auth (认证、用户、
 
 ### 4.1 数据库配置
 
+所有服务共用一个 MySQL 数据库 `asset-ai`：
+
 ```properties
 # 数据库连接信息
 spring.datasource.url=jdbc:mysql://localhost:3306/asset-ai
 spring.datasource.username=root
 spring.datasource.password=${DB_PASSWORD}
 ```
+
+`asset-ai` 由原资产管理系统数据库 `asset_management` 与 RAG 助手数据库 `ai_chat_db` 合并而来，共 19 张表，原两个数据库保持独立、不受影响：
+
+| 来源 | 表 | 说明 |
+|------|----|------|
+| `asset_management` | `asset`、`asset_application`、`user`、`department`、`role`、`permission` 等 17 张 | 业务与权限数据 |
+| `ai_chat_db` | `ai_conversation`、`ai_message` | AI 会话与消息；导入时主键整体偏移 +1000，避免与原库冲突。`ai_chat_db.user` 与主系统用户表重名，未导入 |
+| 仓库脚本 | `db/asset-ai-schema.sql` | 上述 19 张表的完整建表脚本（仅结构，不含数据） |
+
+AI 会话表还会由 `asset-ai` 启动时执行 `classpath:sql/ai_schema.sql`（`CREATE TABLE IF NOT EXISTS`）确保存在，可重复执行。
 
 ### 4.2 核心数据表
 
@@ -304,6 +316,26 @@ spring.datasource.password=${DB_PASSWORD}
 | accumulated_depreciation | DECIMAL | 累计折旧 |
 | net_value | DECIMAL | 折旧后净值 |
 
+#### 4.2.6 AI 会话表（ai_conversation）
+
+| 字段名 | 数据类型 | 说明 |
+|--------|---------|------|
+| id | BIGINT | 主键ID |
+| user_id | BIGINT | 所属用户ID |
+| title | VARCHAR(200) | 会话标题（取自首条提问） |
+| create_time | DATETIME(6) | 创建时间 |
+| update_time | DATETIME(6) | 更新时间 |
+
+#### 4.2.7 AI 消息表（ai_message）
+
+| 字段名 | 数据类型 | 说明 |
+|--------|---------|------|
+| id | BIGINT | 主键ID |
+| conversation_id | BIGINT | 会话ID |
+| role | VARCHAR(20) | user / assistant |
+| content | TEXT | 消息内容 |
+| create_time | DATETIME(6) | 创建时间 |
+
 ---
 
 ## 5. API接口文档
@@ -314,7 +346,7 @@ spring.datasource.password=${DB_PASSWORD}
 |---------|------|------|
 | `/api/auth/login` | POST | 用户登录 |
 | `/api/auth/logout` | POST | 用户登出 |
-| `/api/auth/me` | GET | 获取当前用户信息 |
+| `/api/auth/users/current` | GET | 获取当前用户信息 |
 | `/api/auth/validate-token` | POST | 验证Token有效性 |
 
 ### 5.2 用户管理接口（asset-auth）
@@ -579,11 +611,23 @@ proxy: {
 
 ### 9.2 数据库初始化
 
+1. 创建数据库：
+
 ```sql
 CREATE DATABASE `asset-ai` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
-数据库表结构由 JPA 在服务启动时自动创建/更新。默认连接配置：`localhost:3306`，用户名 `root`，密码通过环境变量 `DB_PASSWORD` 提供。
+2. 导入表结构（**仅空库执行**，脚本会先 `DROP` 同名表）：
+
+```bash
+mysql -u root -p asset-ai < db/asset-ai-schema.sql
+```
+
+3. 启动 `asset-ai` 服务时会再执行 `asset-ai/src/main/resources/sql/ai_schema.sql`，以 `CREATE TABLE IF NOT EXISTS` 确保 AI 会话表存在。
+
+> 三个服务的 `spring.jpa.hibernate.ddl-auto` 均为 `none`，JPA 不会自动创建或修改表结构。
+> 默认连接：`localhost:3306/asset-ai`，用户名 `root`，密码由环境变量 `DB_PASSWORD` 提供。
+> 仓库未附带业务种子数据；从空库开始时，需自行创建部门、角色和用户（密码以 BCrypt 存储）。`asset-auth` 启动时会自动补齐 admin / leader / manager / user 四个角色（权限校验统一按大写处理）。
 
 ### 9.3 启动步骤
 
@@ -663,7 +707,7 @@ mvn -pl asset-gateway spring-boot:run
 
 ### 9.5 演示账号
 
-初始化数据包含以下账号，密码由初始化脚本设置，首次登录后请尽快修改：
+以下账号来自原资产管理系统的示例数据（**未随仓库提供**，需要时请从原数据库导入或自行创建），密码均为 `123456`，首次登录后请尽快修改：
 
 | 用户名 | 角色 | 说明 |
 |--------|------|------|
@@ -720,6 +764,9 @@ asset-common/
 ├── enums/            # 枚举类
 ├── security/         # JWT工具类
 └── util/             # 公共工具类
+
+db/
+└── asset-ai-schema.sql   # asset-ai 数据库建表脚本（仅结构，19 张表）
 ```
 
 ### 10.2 前端项目结构
@@ -796,7 +843,7 @@ frontend/src/
 ## 12. 版本信息
 
 - **项目版本**：0.0.1-SNAPSHOT
-- **Spring Boot 版本**：3.2.5
+- **Spring Boot 版本**：3.2.10
 - **Spring Cloud 版本**：2023.0.1
 - **Spring Cloud Alibaba 版本**：2023.0.1.0
 - **Vue 版本**：3.5.x
