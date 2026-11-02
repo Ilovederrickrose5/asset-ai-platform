@@ -1,0 +1,108 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: asset-ai
+
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/asset_management?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+        dialect: org.hibernate.dialect.MySQLDialect
+
+  # ai_conversation / ai_message 建表脚本，可重复执行
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:sql/ai_schema.sql
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
+      timeout: 10000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-wait: -1ms
+          max-idle: 8
+          min-idle: 0
+
+  # SSE 长回答可能超过默认 30s 异步超时
+  mvc:
+    async:
+      request-timeout: 300000
+
+  ai:
+    openai:
+      api-key: ${ALIYUN_API_KEY}
+      base-url: ${ALIYUN_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode}
+      chat:
+        options:
+          model: ${AI_CHAT_MODEL:qwen-plus}
+          temperature: 0.7
+          max-tokens: 2048
+      embedding:
+        options:
+          model: ${AI_EMBEDDING_MODEL:text-embedding-v2}
+    vectorstore:
+      redis:
+        uri: redis://${spring.data.redis.host:localhost}:${spring.data.redis.port:6379}
+        index: asset_knowledge_index
+        initialize-schema: true
+        prefix: "asset:rag:vector:"
+
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+        namespace: public
+        group: DEFAULT_GROUP
+        service: ${spring.application.name}
+        enabled: true
+
+jwt:
+  secret: ${JWT_SECRET}
+  expiration: ${JWT_EXPIRATION:86400000}
+
+app:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173,http://localhost:9000}
+
+rag:
+  enabled: ${RAG_ENABLED:true}
+  retrieval:
+    top-k: 3
+    similarity-threshold: 0.30
+  chunk:
+    max-size: 800
+    overlap-size: 200
+  knowledge:
+    directory: knowledge/
+    default-tenant: asset
+
+chat:
+  max-history-size: 20
+  max-message-length: 4000
+  max-tokens: 4096
+  cache-expire-hours: 24
+
+logging:
+  level:
+    com.enterprise.asset.ai: DEBUG
+    org.springframework.ai: INFO
+    org.springframework.security: INFO
+    org.hibernate.SQL: WARN

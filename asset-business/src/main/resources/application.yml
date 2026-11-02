@@ -1,0 +1,88 @@
+spring:
+  application:
+    name: asset-business
+  
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/asset_management?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+        dialect: org.hibernate.dialect.MySQLDialect
+  
+  jackson:
+    serialization:
+      fail-on-empty-beans: false
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 10000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-wait: -1ms
+          max-idle: 8
+          min-idle: 0
+
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+        namespace: public
+        group: DEFAULT_GROUP
+        service: ${spring.application.name}
+        enabled: true
+
+    # Sentinel: 熔断降级配置
+    sentinel:
+      transport:
+        dashboard: localhost:8080    # Sentinel 控制台地址
+        port: 8719                    # 与控制台通信的本地端口(占用则自动+1)
+        heartbeat-interval-ms: 10000
+      eager: true                     # 服务启动即向控制台发送心跳, 加速规则下发
+      web-context-unify: false        # 链路入口区分, 便于按 url 配置流控
+
+  openfeign:
+    enabled: true
+    client:
+      config:
+        default:
+          connectTimeout: 5000
+          readTimeout: 5000
+        asset-auth:
+          connectTimeout: 3000
+          readTimeout: 3000
+
+# Feign 开启 Sentinel 兜底: spring-cloud-starter-alibaba-sentinel + 此开关
+# 触发 SentinelFeign 自动配置, 调用失败时进入 fallbackFactory
+feign:
+  sentinel:
+    enabled: true
+
+# 与 auth 服务保持一致的 JWT 密钥，由环境变量 JWT_SECRET 提供
+jwt:
+  secret: ${JWT_SECRET}
+  expiration: ${JWT_EXPIRATION:86400000}
+
+app:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173,http://localhost:9000}
+
+server:
+  port: 8082
+
+logging:
+  level:
+    com.enterprise.asset.business: DEBUG
+    com.enterprise.asset.business.client: DEBUG
