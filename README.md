@@ -232,7 +232,7 @@ frontend ──→ asset-gateway (9000) ──→ asset-auth (认证、用户、
 
 ```properties
 # 数据库连接信息
-spring.datasource.url=jdbc:mysql://localhost:3306/asset_management
+spring.datasource.url=jdbc:mysql://localhost:3306/asset-ai
 spring.datasource.username=root
 spring.datasource.password=${DB_PASSWORD}
 ```
@@ -580,7 +580,7 @@ proxy: {
 ### 9.2 数据库初始化
 
 ```sql
-CREATE DATABASE asset_management CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE `asset-ai` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
 数据库表结构由 JPA 在服务启动时自动创建/更新。默认连接配置：`localhost:3306`，用户名 `root`，密码通过环境变量 `DB_PASSWORD` 提供。

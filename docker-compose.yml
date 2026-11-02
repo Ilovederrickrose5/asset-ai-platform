@@ -1,7 +1,7 @@
 name: asset-ai-platform
 
 # 基础设施: Redis + Nacos
-# MySQL 复用本机 Windows 服务 (localhost:3306), 已包含 asset_management 数据库
+# MySQL 复用本机 Windows 服务 (localhost:3306), 使用 asset-ai 数据库
 # 启动: docker compose up -d
 # 停止: docker compose down
 
