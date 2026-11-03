@@ -105,7 +105,8 @@ public class AssetService {
         if (isDeptScoped(user)) {
             return user.getDeptId() != null && user.getDeptId().equals(asset.getDeptId());
         }
-        return asset.getUserId() != null && asset.getUserId().equals(user.getId());
+        // 普通员工可查看全公司公共资产，部门仅表示归属
+        return true;
     }
 
     // === 查询 ===
@@ -121,7 +122,8 @@ public class AssetService {
         if (isDeptScoped(userDTO)) {
             return userDTO.getDeptId() == null ? List.of() : assetRepository.findByDeptId(userDTO.getDeptId());
         }
-        return assetRepository.findByUserId(userDTO.getId());
+        // 普通员工可浏览全公司公共资产
+        return assetRepository.findAll();
     }
 
     public Page<Asset> getAssetsWithPagination(int page, int size, String status, String sortBy, String sortDir) {
@@ -174,12 +176,8 @@ public class AssetService {
     private Specification<Asset> buildAssetSpecification(UserDTO userDTO, String status, String keyword,
                                                          boolean onlyMine) {
         Long deptId = !onlyMine && isDeptScoped(userDTO) ? userDTO.getDeptId() : null;
-        Long userId = null;
-        if (onlyMine) {
-            userId = userDTO.getId();
-        } else if (!isAdmin(userDTO) && !isDeptScoped(userDTO)) {
-            userId = userDTO.getId();
-        }
+        // 普通员工不按用户过滤，可查看全公司公共资产
+        Long userId = onlyMine ? userDTO.getId() : null;
         boolean denyAll = !onlyMine && isDeptScoped(userDTO) && userDTO.getDeptId() == null;
         String normalizedStatus = isEmpty(status) ? null : status;
         String normalizedKeyword = isEmpty(keyword) ? null : keyword.trim().toLowerCase();
@@ -224,10 +222,8 @@ public class AssetService {
         if (userDTO == null) {
             return List.of();
         }
-        if (!isAdmin(userDTO)) {
-            if (!isDeptScoped(userDTO) || !departmentId.equals(userDTO.getDeptId())) {
-                return List.of();
-            }
+        if (!isAdmin(userDTO) && isDeptScoped(userDTO) && !departmentId.equals(userDTO.getDeptId())) {
+            return List.of();
         }
         return assetRepository.findByDeptId(departmentId);
     }
@@ -237,10 +233,8 @@ public class AssetService {
         if (userDTO == null) {
             return 0;
         }
-        if (!isAdmin(userDTO)) {
-            if (!isDeptScoped(userDTO) || !departmentId.equals(userDTO.getDeptId())) {
-                return 0;
-            }
+        if (!isAdmin(userDTO) && isDeptScoped(userDTO) && !departmentId.equals(userDTO.getDeptId())) {
+            return 0;
         }
         return assetRepository.countAllAssetsByDepartment(departmentId);
     }
@@ -303,14 +297,8 @@ public class AssetService {
         if (userDTO == null) {
             return List.of();
         }
-        if (isAdmin(userDTO)) {
-            return assetRepository.findByUserIdIsNull().stream()
-                    .filter(asset -> !"scrapped".equals(asset.getStatus()))
-                    .toList();
-        }
-        // 部门维度隔离：普通员工同样只能领用本部门的闲置资产
-        Long deptId = userDTO.getDeptId();
-        return deptId == null ? List.of() : assetRepository.findByDeptIdAndUserIdIsNull(deptId).stream()
+        // 资产属于全公司公共资源，部门仅为归属信息，支持跨部门领用
+        return assetRepository.findByUserIdIsNull().stream()
                 .filter(asset -> !"scrapped".equals(asset.getStatus()))
                 .toList();
     }
@@ -511,8 +499,10 @@ public class AssetService {
 
     private String buildCacheKey(int page, int size, String status, String sortBy, String sortDir,
                                  String keyword, boolean onlyMine, UserDTO userDTO) {
-        return String.format("%suser_%d:admin_%s:dept_%s:page_%d:size_%d:status_%s:sort_%s_%s:kw_%s:mine_%s",
-                CACHE_PREFIX, userDTO.getId(), isAdmin(userDTO),
+        // 角色变化会改变可见范围，将权限范围纳入键，避免旧缓存串用
+        String scope = isAdmin(userDTO) ? "admin" : isDeptScoped(userDTO) ? "dept" : "all";
+        return String.format("%suser_%d:scope_%s:dept_%s:page_%d:size_%d:status_%s:sort_%s_%s:kw_%s:mine_%s",
+                CACHE_PREFIX, userDTO.getId(), scope,
                 userDTO.getDeptId() != null ? userDTO.getDeptId() : "null",
                 page, size, status != null ? status : "all", sortBy, sortDir,
                 isEmpty(keyword) ? "all" : keyword.trim(), onlyMine);

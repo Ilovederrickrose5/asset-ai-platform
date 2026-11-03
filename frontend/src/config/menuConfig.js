@@ -28,12 +28,12 @@ export const menuConfig = [
     children: [
       {
         id: 21,
-        title: '我的资产',
+        title: '资产列表',
         titleByRole: {  // 根据角色显示不同的菜单名称
           'admin': '资产列表',
           'leader': '部门资产',
           'manager': '部门资产',
-          'user': '我的资产'
+          'user': '资产列表'
         },
         path: '/assets/list',
         roles: ['admin', 'leader', 'manager', 'user'],

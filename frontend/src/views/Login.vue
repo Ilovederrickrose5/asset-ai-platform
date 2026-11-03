@@ -116,6 +116,12 @@
               </div>
             </transition>
 
+            <div class="login-demo">
+              <span class="login-demo__label">演示账号</span>
+              <span class="login-demo__account">demo / Demo@2026</span>
+              <span class="login-demo__desc">普通员工权限，仅供功能体验</span>
+            </div>
+
             <div class="login-hint">
               <span class="hint-line"></span>
               <span>如有登录问题，请联系系统管理员</span>
@@ -692,6 +698,41 @@ export default {
 .login-alert-leave-to {
   opacity: 0;
   transform: translateY(-4px);
+}
+
+.login-demo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin-top: 24px;
+  padding: 11px 14px;
+  border-radius: var(--eam-radius-sm);
+  background: rgba(84, 108, 150, 0.06);
+  border: 1px solid rgba(84, 108, 150, 0.14);
+}
+
+.login-demo__label {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #4a628a;
+  background: rgba(84, 108, 150, 0.12);
+}
+
+.login-demo__account {
+  font-family: var(--eam-font-mono);
+  font-size: 12px;
+  color: var(--eam-ink-700);
+}
+
+.login-demo__desc {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--eam-ink-400);
 }
 
 .login-hint {

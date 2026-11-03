@@ -597,14 +597,17 @@ export default {
     
     // 页面标题（根据角色动态显示）
     const pageTitle = computed(() => {
+      if (onlyMine.value) {
+        return '我的资产'
+      }
       const userRole = getUserRole()
       const titleMap = {
         'admin': '资产列表',
         'leader': '部门资产',
         'manager': '部门资产',
-        'user': '我的资产'
+        'user': '资产列表'
       }
-      return titleMap[userRole] || '我的资产'
+      return titleMap[userRole] || '资产列表'
     })
 
     const showStaffColumns = computed(() => userStore.hasRole(['admin', 'leader', 'manager']))
@@ -621,9 +624,12 @@ export default {
     }
 
     const pageSubtitle = computed(() => {
+      if (onlyMine.value) {
+        return '查看名下资产，可发起维修等申请'
+      }
       return showStaffColumns.value
         ? '管理资产台账、使用状态与借出情况，支持按名称与状态筛选'
-        : '查看名下与可领用资产，可发起领用、报修等申请'
+        : '浏览公司全部资产，可对闲置资产发起领用、报修等申请'
     })
 
     const assetStatusMap = {
